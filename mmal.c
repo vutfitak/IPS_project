@@ -76,8 +76,7 @@ Arena *first_arena = NULL;
 static
 size_t allign_page(size_t size)
 {
-    // FIXME
-    (void)size;
+    size = ((size + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
     return size;
 }
 
