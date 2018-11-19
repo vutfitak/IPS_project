@@ -228,9 +228,9 @@ void hdr_merge(Header *left, Header *right)
 {
     assert(left->next == right);
     assert(left != right);
-    (void)left;
-    (void)right;
-    // FIXME
+    left->size += right->size + sizeof(Header);
+    left->next = right->next;
+    right = NULL;
 }
 
 /**
@@ -259,8 +259,14 @@ static
 Header *hdr_get_prev(Header *hdr)
 {
     assert(first_arena != NULL);
-    (void)hdr;
-    return NULL;
+    Header *temp = (Header *)(first_arena - sizeof(Header));
+    if (temp->next == NULL){
+        return hdr;
+    }
+    while(temp->next != hdr){
+        temp = temp->next;
+    }
+    return temp;
 }
 
 /**
@@ -283,8 +289,11 @@ void *mmalloc(size_t size)
 void mfree(void *ptr)
 {
     assert(ptr != NULL);
-    (void)ptr;
-    // FIXME
+    Header *prev = hdr_get_prev(ptr - sizeof(Header));
+    prev->next = ((Header *)(ptr - sizeof(Header)))->next;
+    prev->size = prev->size - (size_t)prev - sizeof(Header);
+
+    munmap(ptr - sizeof(Header), ((Header *)(ptr - sizeof(Header)))->size);
 }
 
 /**
