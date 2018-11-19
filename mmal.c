@@ -106,7 +106,9 @@ Arena *arena_alloc(size_t req_size)
 static
 void arena_append(Arena *a)
 {
-    (void)a;
+    static Arena *end = first_arena;
+    end->next = a;
+    end = a;
 }
 
 /**
@@ -145,8 +147,8 @@ bool hdr_should_split(Header *hdr, size_t size)
     assert(hdr->asize == 0);
     assert(size > 0);
     // FIXME
-    (void)hdr;
-    (void)size;
+    if(hdr->size >= sizeof(Header) + size + 1)
+        return true;
     return false;
 }
 
@@ -196,9 +198,10 @@ bool hdr_can_merge(Header *left, Header *right)
 {
     assert(left->next == right);
     assert(left != right);
-    // FIXME
-    (void)left;
-    (void)right;
+    if(right - left == left->size && 
+            left->asize == 0 && 
+            right->asize == 0)
+        return true;
     return false;
 }
 
@@ -229,8 +232,14 @@ static
 Header *first_fit(size_t size)
 {
     assert(size > 0);
-    // FIXME
-    (void)size;
+    Header *header = (Header *) (first_arena + 1);
+    Header *first = header;
+    do
+    {
+        header = header->next;
+        if(header->asize == 0 && header->size >= size)
+            return header;
+    }while(header != first);
     return NULL;
 }
 
@@ -256,8 +265,24 @@ Header *hdr_get_prev(Header *hdr)
  */
 void *mmalloc(size_t size)
 {
-    // FIXME
-    (void)size;
+    Header *block = first_fit(size);
+    if(block)
+    {
+        if(hdr_should_split(block, size))
+            hdr_split(block, size);
+        block->asize = size;
+        return (void *) (block + 1);
+    }
+    else
+    {
+        Arena *new = arena_alloc(2 * size);
+        arena_append(new);
+        Header *new_header = (Header *) (new + 1);
+        hdr_ctor(new_header, 
+                new->size - sizeof(Header) - sizeof(Arena));
+        return (void *)(new_header + 1);
+    }
+
     return NULL;
 }
 
@@ -282,8 +307,23 @@ void mfree(void *ptr)
  */
 void *mrealloc(void *ptr, size_t size)
 {
-    // FIXME
-    (void)ptr;
-    (void)size;
+    Header *header = ((Header *)ptr) - 1;
+    if(header->size == size)
+        return ptr;
+    else if(header->size > size)
+    {
+        header->asize = size;
+        return ptr;
+    }
+    else
+    {
+        void *new_ptr = mmalloc(size);
+        if(new_ptr != NULL)
+        {
+            memcpy(new_ptr, ptr, header->asize);
+            mfree(ptr);
+        }
+        return new_ptr;
+    }
     return NULL;
 }
