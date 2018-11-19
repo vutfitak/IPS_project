@@ -64,6 +64,10 @@ struct arena {
 
 #endif // NDEBUG
 
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS 0x20
+#endif
+
 Arena *first_arena = NULL;
 
 /**
@@ -94,9 +98,13 @@ static
 Arena *arena_alloc(size_t req_size)
 {
     assert(req_size > sizeof(Arena) + sizeof(Header));
-    // FIXME
-    (void)req_size;
-    return NULL;
+    static Arena temp;
+    temp.next = mmap(NULL, req_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (temp.next == (void*)-1){
+        return NULL;
+    }
+    temp. size = req_size;
+    return &temp;
 }
 
 /**
@@ -128,9 +136,10 @@ static
 void hdr_ctor(Header *hdr, size_t size)
 {
     assert(size > 0);
-    // FIXME
-    (void)hdr;
-    (void)size;
+    static Header temp;
+    temp.size = size;
+    temp.asize = 0;
+    hdr = &temp;
 }
 
 /**
@@ -179,10 +188,15 @@ static
 Header *hdr_split(Header *hdr, size_t req_size)
 {
     assert((hdr->size >= req_size + 2*sizeof(Header)));
-    // FIXME
-    (void)hdr;
-    (void)req_size;
-    return NULL;
+    
+    Header *temp = ((Header *) hdr) + sizeof(Header) + req_size;
+    hdr->size = req_size;
+    temp->next = hdr->next;
+    hdr->next = temp;
+    temp->asize = 0;
+    temp->size =temp->next - temp - sizeof(Header);
+
+    return temp;
 }
 
 /**
@@ -217,9 +231,9 @@ void hdr_merge(Header *left, Header *right)
 {
     assert(left->next == right);
     assert(left != right);
-    (void)left;
-    (void)right;
-    // FIXME
+    left->size += right->size + sizeof(Header);
+    left->next = right->next;
+    right = NULL;
 }
 
 /**
@@ -254,8 +268,14 @@ static
 Header *hdr_get_prev(Header *hdr)
 {
     assert(first_arena != NULL);
-    (void)hdr;
-    return NULL;
+    Header *temp = (Header *)(first_arena - sizeof(Header));
+    if (temp->next == NULL){
+        return hdr;
+    }
+    while(temp->next != hdr){
+        temp = temp->next;
+    }
+    return temp;
 }
 
 /**
@@ -294,8 +314,11 @@ void *mmalloc(size_t size)
 void mfree(void *ptr)
 {
     assert(ptr != NULL);
-    (void)ptr;
-    // FIXME
+    Header *prev = hdr_get_prev(ptr - sizeof(Header));
+    prev->next = ((Header *)(ptr - sizeof(Header)))->next;
+    prev->size = prev->size - (size_t)prev - sizeof(Header);
+
+    munmap(ptr - sizeof(Header), ((Header *)(ptr - sizeof(Header)))->size);
 }
 
 /**
