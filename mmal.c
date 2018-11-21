@@ -1,3 +1,4 @@
+// xwysog00
 /**
  * Implementace My MALloc
  * Demonstracni priklad pro 1. ukol IPS/2018
@@ -365,7 +366,7 @@ void *mrealloc(void *ptr, size_t size)
         return ptr;
     }
     else if(next_header->asize == 0 && 
-            (((char *)header) + header->size + sizeof(Header)) == next_header &&
+            (Header *)(((char *)header) + header->size + sizeof(Header)) == next_header &&
             next_header->size + header->size + sizeof(Header) > size)
     {
         header->next = next_header->next;
